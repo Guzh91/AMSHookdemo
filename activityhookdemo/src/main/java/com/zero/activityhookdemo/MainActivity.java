@@ -5,6 +5,7 @@ import android.content.Intent;
 import android.os.Bundle;
 import android.support.v7.app.AppCompatActivity;
 import android.view.View;
+import android.widget.Button;
 import android.widget.TextView;
 
 import com.zero.activityhookdemo.hook.HookHelper;
@@ -16,6 +17,19 @@ public class MainActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
+
+        Button button0 = findViewById(R.id.btn_hook0);
+        button0.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+
+            }
+        });
+        try {
+            HookHelper.hookOnClickListener(button0);
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
     }
 
     @Override
@@ -24,6 +38,8 @@ public class MainActivity extends AppCompatActivity {
 //        HookHelper.hookAMSInterceptStartActivity();
 //        HookHelper.hookH();
     }
+
+
 
     /**
      * 通过  上下文 hook

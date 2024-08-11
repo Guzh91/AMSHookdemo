@@ -14,12 +14,20 @@
         android:text="Hello World!" />
 
     <Button
+        android:id="@+id/btn_hook0"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_margin="16dp"
+        android:onClick="onBtnHook1Clicked"
+        android:text="hook OnClick" />
+
+    <Button
         android:id="@+id/btn_hook1"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_margin="16dp"
         android:onClick="onBtnHook1Clicked"
-        android:text="hookInstrumentation" />
+        android:text="hook Instrumentation" />
 
     <Button
         android:id="@+id/btn_hook2"
@@ -27,7 +35,7 @@
         android:layout_height="wrap_content"
         android:layout_margin="16dp"
         android:onClick="onBtnHook2Clicked"
-        android:text="hookActivityThreadInstrumentation" />
+        android:text="hook ActivityThreadInstrumentation" />
 
     <Button
         android:id="@+id/btn_hook3"
@@ -35,7 +43,7 @@
         android:layout_height="wrap_content"
         android:layout_margin="16dp"
         android:onClick="onBtnHook3Clicked"
-        android:text="hookAMS" />
+        android:text="hook AMS" />
 
     <Button
         android:id="@+id/btn_hook4"
