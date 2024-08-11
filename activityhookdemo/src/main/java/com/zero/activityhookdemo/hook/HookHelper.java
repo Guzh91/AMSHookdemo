@@ -21,6 +21,10 @@ public class HookHelper {
 
     public static final String EXTRA_TARGET_INTENT = "extra_target_intent";
 
+    /**
+     * 通过上下文，hook Instrumentation
+     * @param activity
+     */
     public static void hookInstrumentation(Activity activity) {
         //TODO:
         Class<?> activityClass = Activity.class;
@@ -41,6 +45,9 @@ public class HookHelper {
 
     }
 
+    /**
+     * 通过持有的方式-编写代理类
+     */
     static class ProxyInstrumentation extends Instrumentation {
 
         private static final String TAG = "Zero";
@@ -88,19 +95,25 @@ public class HookHelper {
          * @throws ClassNotFoundException
          */
         @Override
-        public Activity newActivity(ClassLoader cl, String className,
-                                    Intent intent)
-                throws InstantiationException, IllegalAccessException,
-                ClassNotFoundException {
+        public Activity newActivity(ClassLoader cl, String className, Intent intent)
+                throws InstantiationException, IllegalAccessException, ClassNotFoundException {
 
             return mBase.newActivity(cl, className, intent);
         }
     }
 
+    /**
+     * 通过hook ActvityThread 中 Instrumentation
+     */
     public static void hookActivityThreadInstrumentation() {
-        //TODO:
         try {
             // 先获取到当前的ActivityThread对象
+            //ActivityThread 有唯一实例
+            //    private static volatile ActivityThread sCurrentActivityThread;
+            //通过currentActivityThread()方法返回
+            //    public static ActivityThread currentActivityThread() {
+            //        return sCurrentActivityThread;
+            //    }
             Class<?> activityThreadClass = Class.forName("android.app.ActivityThread");
             Method currentActivityThreadMethod = activityThreadClass.getDeclaredMethod("currentActivityThread");
             currentActivityThreadMethod.setAccessible(true);
@@ -111,6 +124,7 @@ public class HookHelper {
             Field mInstrumentationField = activityThreadClass.getDeclaredField("mInstrumentation");
             mInstrumentationField.setAccessible(true);
             Instrumentation mInstrumentation = (Instrumentation) mInstrumentationField.get(currentActivityThread);
+
             // 创建代理对象
             Instrumentation proxyInstrumentation = new ProxyInstrumentation(mInstrumentation);
             // 偷梁换柱
@@ -120,11 +134,24 @@ public class HookHelper {
         }
     }
 
+    /**
+     * hookAMS的思路
+     * 1.找到了Hook的点
+     * 2.hook点 动态代理 静态?
+     * 3.获取到getDefault的IActivityManager原始对象
+     * 4.动态代理 准备classloader 接口
+     * 5.classloader，获取当前线程
+     * 6.接口Class.forName("android.app.IActivityManager");
+     * 7.Proxy.newProxyInstance() 得到一个IActivityManagerProxy
+     * 8.IActivityManaqerProxy融入到framework
+     */
     public static void hookAMS() {
         //TODO:
         try {
             Field gDefaultField = null;
+            //26版本后的区别
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                //这是需要反射的Singleton
 //                public abstract class Singleton<T> {
 //                    private T mInstance;
 //
@@ -159,10 +186,16 @@ public class HookHelper {
             Object rawIActivityManager = mInstanceField.get(gDefault);
 
             // 创建一个这个对象的代理对象, 然后替换这个字段, 让我们的代理对象帮忙干活
+            //动态代理的是一个接口！！！！重要的事情说三遍，动态代理的是接口！！！动态代理的是接口！！！动态代理的是接口！！！
             Class<?> iActivityManagerInterface = Class.forName("android.app.IActivityManager");
-            Object proxy = Proxy.newProxyInstance(Thread.currentThread().getContextClassLoader(),
-                    new Class<?>[]{iActivityManagerInterface}, new AMSInvocationHandler(rawIActivityManager));
+            Object proxy = Proxy.newProxyInstance(
+                    Thread.currentThread().getContextClassLoader(),
+                    new Class<?>[]{iActivityManagerInterface},
+                    new AMSInvocationHandler(rawIActivityManager));
+
+            //融入到framework
             mInstanceField.set(gDefault, proxy);
+
         } catch (Exception e) {
             e.printStackTrace();
         }
@@ -191,47 +224,64 @@ public class HookHelper {
         }
     }
 
-    public static void hookAMSInterceptStartActivity(){
-      //TODO:
-       try {
-           Field gDefaultField =null;
-           Log.i(TAG, "hookAMSInterceptStartActivity: " + Build.VERSION.SDK_INT);
-           if (Build.VERSION.SDK_INT >=  Build.VERSION_CODES.O ){
-               Class<?> activityManager = Class.forName("android.app.ActivityManager");
-               gDefaultField = activityManager.getDeclaredField("IActivityManagerSingleton");
-               Log.i(TAG, "hookAMSInterceptStartActivity: " + gDefaultField);
-           }else{
-               Class<?> activityManagerNativeClass = Class.forName("android.app.ActivityManagerNative");
-               gDefaultField = activityManagerNativeClass.getDeclaredField("gDefault");
-               Log.i(TAG, "hookAMSInterceptStartActivity: " + gDefaultField);
-           }
-           gDefaultField.setAccessible(true);
-//           gDefaultField.setAccessible(true);
+    /**
+     * Hook AMS 实现替换startActivity
+     */
+    public static void hookAMSInterceptStartActivity() {
+        try {
+            Field gDefaultField = null;
+            Log.i(TAG, "hookAMSInterceptStartActivity: " + Build.VERSION.SDK_INT);
+            //当前关键版本节点 28， 26
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                Class<?> clazz = Class.forName("android.app.ActivityTaskManager");
+                gDefaultField = clazz.getDeclaredField("IActivityTaskManagerSingleton");
+            } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                Class<?> activityManager = Class.forName("android.app.ActivityManager");
+                gDefaultField = activityManager.getDeclaredField("IActivityManagerSingleton");
+            } else {
+                Class<?> activityManagerNativeClass = Class.forName("android.app.ActivityManagerNative");
+                gDefaultField = activityManagerNativeClass.getDeclaredField("gDefault");
+            }
+            Log.i(TAG, "hookAMSInterceptStartActivity: " + gDefaultField);
+            gDefaultField.setAccessible(true);
+            Object gDefault = gDefaultField.get(null);
 
-           Object gDefault = gDefaultField.get(null);
+            // gDefault是一个 android.util.Singleton对象; 我们取出这个单例里面的字段
+            Class<?> singleton = Class.forName("android.util.Singleton");
+            Field mInstanceField = singleton.getDeclaredField("mInstance");
+            mInstanceField.setAccessible(true);
 
-           // gDefault是一个 android.util.Singleton对象; 我们取出这个单例里面的字段
-           Class<?> singleton = Class.forName("android.util.Singleton");
-           Field mInstanceField = singleton.getDeclaredField("mInstance");
-           mInstanceField.setAccessible(true);
+            // ActivityManagerNative 的gDefault对象里面原始的 IActivityManager对象
+            Object rawIActivityManager = mInstanceField.get(gDefault);
 
-           // ActivityManagerNative 的gDefault对象里面原始的 IActivityManager对象
-           Object rawIActivityManager = mInstanceField.get(gDefault);
+            // 创建一个这个对象的代理对象, 然后替换这个字段, 让我们的代理对象帮忙干活
+            // 版本28后manager类不同（流程不同）
+            Class<?> iActivityManagerInterface;
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                iActivityManagerInterface = Class.forName("android.app.IActivityTaskManager");
+            } else {
+                iActivityManagerInterface = Class.forName("android.app.IActivityManager");
 
-           // 创建一个这个对象的代理对象, 然后替换这个字段, 让我们的代理对象帮忙干活
-           Class<?> iActivityManagerInterface = Class.forName("android.app.IActivityManager");
-           Object proxy = Proxy.newProxyInstance(Thread.currentThread().getContextClassLoader(),
-                   new Class<?>[] { iActivityManagerInterface }, new IActivityManagerHandler(rawIActivityManager));
-           mInstanceField.set(gDefault, proxy);
-       }catch (Exception e){
-           Log.e(TAG, "hookAMSInterceptStartActivity: "+ e.getMessage() );
-           e.printStackTrace();
-       }
+            }
+            Object proxy = Proxy.newProxyInstance(Thread.currentThread().getContextClassLoader(),
+                    new Class<?>[]{iActivityManagerInterface}, new IActivityManagerHandler(rawIActivityManager));
+
+            //融入framework
+            mInstanceField.set(gDefault, proxy);
+        } catch (Exception e) {
+            Log.e(TAG, "hookAMSInterceptStartActivity: " + e.getMessage());
+            e.printStackTrace();
+        }
     }
 
-    public static void hookH(){
-        try{
+    /**
+     * hook ActivityThread 中的 mH（Handler），回填mCallBack，实现无注册activity展示
+     */
+    public static void hookH() {
+        try {
             // 先获取到当前的ActivityThread对象
+            //    一个app中只有一个ActvityThread 且 类中设置为了 static参数，所以可以获得唯一对象
+            //    private static volatile ActivityThread sCurrentActivityThread;
             Class<?> activityThreadClass = Class.forName("android.app.ActivityThread");
             Field currentActivityThreadField = activityThreadClass.getDeclaredField("sCurrentActivityThread");
             currentActivityThreadField.setAccessible(true);
@@ -261,8 +311,8 @@ public class HookHelper {
             mCallBackField.setAccessible(true);
 
             mCallBackField.set(mH, new ActivityThreadHandlerCallback(mH));
-        }catch(Exception e){
-            Log.e(TAG, "hookH: "+e.getMessage() );
+        } catch (Exception e) {
+            Log.e(TAG, "hookH: " + e.getMessage());
             e.printStackTrace();
         }
 

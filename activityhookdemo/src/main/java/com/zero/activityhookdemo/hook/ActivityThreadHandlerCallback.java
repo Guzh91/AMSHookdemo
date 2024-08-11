@@ -27,9 +27,10 @@ public class ActivityThreadHandlerCallback implements Handler.Callback {
             // 本来使用反射的方式获取最好, 这里为了简便直接使用硬编码
             // 在H类中，定义了几十种消息，比如说LAUNCH_ACTIVITY的值是100，PAUSE_ACTIVITY的值是101。从100到109，都是给Activity的生命周期函数准备的
             case 100:
+                //恢复真身
                 handleLaunchActivity(msg);
                 break;
-            case 159:   //for API Build.VERSION_CODES.O
+            case 159:   //for API Build.VERSION_CODES.O after
                 handleActivity(msg);
                 break;
         }
@@ -81,14 +82,26 @@ public class ActivityThreadHandlerCallback implements Handler.Callback {
 
             if(mActivityCallbacks.size() > 0) {
                 String className = "android.app.servertransaction.LaunchActivityItem";
-                if(mActivityCallbacks.get(0).getClass().getCanonicalName().equals(className)) {
-                    Object object = mActivityCallbacks.get(0);
-                    Field intentField = object.getClass().getDeclaredField("mIntent");
-                    intentField.setAccessible(true);
-                    Intent intent = (Intent) intentField.get(object);
-                    Intent target = intent.getParcelableExtra(HookHelper.EXTRA_TARGET_INTENT);
-                    intent.setComponent(target.getComponent());
+                for (int i = 0; i < mActivityCallbacks.size(); i++) {
+                    // 打印 mActivityCallbacks 的所有item:
+                    //android.app.servertransaction.WindowVisibilityItem
+                    //android.app.servertransaction.LaunchActivityItem
+
+                    // 如果是 LaunchActivityItem，则获取该类中的 mIntent 值，即 proxyIntent
+                    if(mActivityCallbacks.get(i).getClass().getCanonicalName().equals(className)) {
+                        Object object = mActivityCallbacks.get(0);
+                        Field intentField = object.getClass().getDeclaredField("mIntent");
+                        intentField.setAccessible(true);
+                        Intent intent = (Intent) intentField.get(object);
+                        // 获取启动插件的 Intent，并替换回来
+                        Intent target = intent.getParcelableExtra(HookHelper.EXTRA_TARGET_INTENT);
+                        if (target != null){
+                            intent.setComponent(target.getComponent());
+                            break;
+                        }
+                    }
                 }
+
             }
         }catch(Exception e){
             Log.e(TAG, "handleActivity: "+ e.getMessage() );
