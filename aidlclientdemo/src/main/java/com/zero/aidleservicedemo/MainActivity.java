@@ -11,13 +11,16 @@ import android.os.IBinder;
 import android.os.RemoteException;
 import android.support.v7.app.AppCompatActivity;
 import android.util.Log;
+import android.view.View;
 import android.widget.TextView;
+
+import com.zero.aidlclientdemo.R;
 
 import java.util.List;
 
-import butterknife.BindView;
-import butterknife.ButterKnife;
-import butterknife.OnClick;
+//import butterknife.BindView;
+//import butterknife.ButterKnife;
+//import butterknife.OnClick;
 
 public class MainActivity extends AppCompatActivity {
 
@@ -26,7 +29,7 @@ public class MainActivity extends AppCompatActivity {
     private static final String ACTION = "com.zero.aidleservicedemo.service.action_myaidldemo";
 
     IMyAidlInterface myAidlInterface;
-    @BindView(R.id.textView)
+
     TextView textView;
 
     public static Intent createExplicitFromImplicitIntent(Context context, Intent implicitIntent) {
@@ -69,14 +72,13 @@ public class MainActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
-        ButterKnife.bind(this);
+        textView = findViewById(R.id.textView);
         Intent intent = new Intent(ACTION);
         intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
         bindService(createExplicitFromImplicitIntent(MainActivity.this,intent), mConn, BIND_AUTO_CREATE);
     }
 
-    @OnClick(R.id.btn_getdata)
-    public void onBtnGetdataClicked() {
+    public void onBtnGetdataClicked(View view) {
         if(myAidlInterface!=null){
             try {
                 String str =myAidlInterface.getData();
@@ -88,8 +90,7 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    @OnClick(R.id.btn_sendData)
-    public void onBtnSendDataClicked() {
+    public void onBtnSendDataClicked(View view) {
         try {
             int ret = myAidlInterface.sendData("Hello aidl");
             Log.i(TAG, "onBtnSendDataClicked: " + ret);

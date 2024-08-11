@@ -18,6 +18,7 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_margin="16dp"
+        android:onClick="onBtnHook1Clicked"
         android:text="hookInstrumentation" />
 
     <Button
@@ -25,6 +26,7 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_margin="16dp"
+        android:onClick="onBtnHook2Clicked"
         android:text="hookActivityThreadInstrumentation" />
 
     <Button
@@ -32,6 +34,7 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_margin="16dp"
+        android:onClick="onBtnHook3Clicked"
         android:text="hookAMS" />
 
     <Button
@@ -39,6 +42,7 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_margin="16dp"
+        android:onClick="onBtnHook4Clicked"
         android:text="启动无注册的Activity" />
 
 </LinearLayout>
