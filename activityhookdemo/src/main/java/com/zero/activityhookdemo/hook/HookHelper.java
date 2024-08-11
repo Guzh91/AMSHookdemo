@@ -1,7 +1,9 @@
 package com.zero.activityhookdemo.hook;
 
+import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.app.Instrumentation;
+import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.os.Build;
@@ -9,6 +11,9 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.os.IBinder;
 import android.util.Log;
+
+import com.zero.activityhookdemo.StubActivity;
+import com.zero.activityhookdemo.TargetActivity;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationHandler;
@@ -21,12 +26,15 @@ public class HookHelper {
 
     public static final String EXTRA_TARGET_INTENT = "extra_target_intent";
 
+    public static boolean isAMSHooked = false;
+    public static boolean isInstrumentationHooked = false;
+
     /**
      * 通过上下文，hook Instrumentation
+     *
      * @param activity
      */
     public static void hookInstrumentation(Activity activity) {
-        //TODO:
         Class<?> activityClass = Activity.class;
         //通过Activity.class 拿到 mInstrumentation字段
         Field field = null;
@@ -52,10 +60,10 @@ public class HookHelper {
 
         private static final String TAG = "Zero";
         // ActivityThread中原始的对象, 保存起来
-        Instrumentation mBase;
+        Instrumentation instrumentation;
 
         public ProxyInstrumentation(Instrumentation base) {
-            mBase = base;
+            instrumentation = base;
         }
 
         public ActivityResult execStartActivity(
@@ -67,15 +75,30 @@ public class HookHelper {
                     "target = [" + target + "], intent = [" + intent +
                     "], requestCode = [" + requestCode + "], options = [" + options + "]");
 
+
+            ComponentName componentName = intent.getComponent();
+            String packageName = componentName.getPackageName();
+            String classname = componentName.getClassName();
+            if (classname.equals("com.zero.activityhookdemo.TargetActivity")) { //判断是否为StubActivity
+                intent.setClassName(who, StubActivity.class.getCanonicalName()); // 替换为注册的ProxyActivity启动
+                intent.putExtra(EXTRA_TARGET_INTENT, classname); // 同时保存原来的StubActivity
+            }
+
             // 由于这个方法是隐藏的,因此需要使用反射调用;首先找到这个方法
             //execStartActivity有重载，别找错了
             try {
-                Method execStartActivity = Instrumentation.class.getDeclaredMethod(
+                Method execStartActivityMethod = Instrumentation.class.getDeclaredMethod(
                         "execStartActivity",
                         Context.class, IBinder.class, IBinder.class, Activity.class,
                         Intent.class, int.class, Bundle.class);
-                execStartActivity.setAccessible(true);
-                return (ActivityResult) execStartActivity.invoke(mBase, who,
+                execStartActivityMethod.setAccessible(true);
+
+//                Method execStartActivityMethod = instrumentation.getClass().getDeclaredMethod(
+//                        "execStartActivity",
+//                        Context.class, IBinder.class, IBinder.class, Activity.class, Intent.class, int.class, Bundle.class);
+//                execStartActivityMethod.setAccessible(true);
+
+                return (ActivityResult) execStartActivityMethod.invoke(instrumentation, who,
                         contextThread, token, target, intent, requestCode, options);
             } catch (Exception e) {
                 throw new RuntimeException("do not support!!! pls adapt it");
@@ -98,7 +121,16 @@ public class HookHelper {
         public Activity newActivity(ClassLoader cl, String className, Intent intent)
                 throws InstantiationException, IllegalAccessException, ClassNotFoundException {
 
-            return mBase.newActivity(cl, className, intent);
+            if (className.equals(StubActivity.class.getCanonicalName())) {
+                String classnameIntent = intent.getStringExtra(EXTRA_TARGET_INTENT);
+                String packageName = intent.getComponent().getPackageName(); // 获取Intent中保存的真正Activity包名、类名
+                ComponentName componentName = new ComponentName(packageName, classnameIntent); // 替换真实Activity的包名和类名
+                intent.setComponent(componentName);
+                className = classnameIntent;
+            }
+            Log.d("FixInstrumentation == ", "set activity is  original" + className);
+
+            return instrumentation.newActivity(cl, className, intent);
         }
     }
 
@@ -114,11 +146,17 @@ public class HookHelper {
             //    public static ActivityThread currentActivityThread() {
             //        return sCurrentActivityThread;
             //    }
+//            Class<?> activityThreadClass = Class.forName("android.app.ActivityThread");
+//            Method currentActivityThreadMethod = activityThreadClass.getDeclaredMethod("currentActivityThread");
+//            currentActivityThreadMethod.setAccessible(true);
+//            //currentActivityThread是一个static函数所以可以直接invoke，不需要带实例参数
+//            Object currentActivityThread = currentActivityThreadMethod.invoke(null);
+
             Class<?> activityThreadClass = Class.forName("android.app.ActivityThread");
-            Method currentActivityThreadMethod = activityThreadClass.getDeclaredMethod("currentActivityThread");
-            currentActivityThreadMethod.setAccessible(true);
-            //currentActivityThread是一个static函数所以可以直接invoke，不需要带实例参数
-            Object currentActivityThread = currentActivityThreadMethod.invoke(null);
+            Field activityThreadField = activityThreadClass.getDeclaredField("sCurrentActivityThread");
+            activityThreadField.setAccessible(true);
+            //获取ActivityThread对象sCurrentActivityThread
+            Object currentActivityThread = activityThreadField.get(null);
 
             // 拿到原始的 mInstrumentation字段
             Field mInstrumentationField = activityThreadClass.getDeclaredField("mInstrumentation");
@@ -268,6 +306,7 @@ public class HookHelper {
 
             //融入framework
             mInstanceField.set(gDefault, proxy);
+            isAMSHooked = true;
         } catch (Exception e) {
             Log.e(TAG, "hookAMSInterceptStartActivity: " + e.getMessage());
             e.printStackTrace();
